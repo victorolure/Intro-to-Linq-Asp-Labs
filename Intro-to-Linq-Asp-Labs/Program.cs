@@ -64,7 +64,7 @@ Hotel.Checkin("Olu"); // After this checkin, Room capacity reduces to 35 from th
 
 Console.WriteLine(Hotel.TotalCapacityRemaining());
 
-Console.WriteLine(Hotel.AverageOccupancyPercentage());
+
 
 foreach(Room room in Hotel.Rooms)
 {
