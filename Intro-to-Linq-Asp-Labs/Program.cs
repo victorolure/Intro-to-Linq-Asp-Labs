@@ -28,14 +28,16 @@ foreach (Room room in Hotel.GetVacantRooms())
 
 try
 {
-    Hotel.ReserveRoom(4, 4, testRoom);
+    Hotel.ReserveRoom(4, 4, testRoom, new DateTime(2022,7, 9));
 }
 catch (Exception ex)
 {
     Console.WriteLine(ex.Message);
 }
 
-Hotel.AutomaticReservation(1, 5);
+
+
+Hotel.AutomaticReservation(1, 5, new DateTime(2022, 7, 8));
 
 Console.WriteLine("\nAfter auto-reservation of first room with capacity of 5, room 5 is thrown out \n");
 foreach (Room room in Hotel.GetVacantRooms())
@@ -43,22 +45,36 @@ foreach (Room room in Hotel.GetVacantRooms())
     Console.WriteLine($"Room number: {room.Number} Capacity: {room.Capacity}");
 }
 
-Hotel.AutomaticReservation(2, 2);
-Hotel.AutomaticReservation(2, 2);
-Hotel.AutomaticReservation(3, 2);
-Hotel.AutomaticReservation(5, 5);
+Hotel.AutomaticReservation(2, 5, new DateTime(2022, 7, 6));//First reservation for a date with client with client Id 2;
 
-Console.WriteLine("\nTop 3 Clients with highest reservations\n");
-foreach (Client client in Hotel.TopThreeClients())
+try
 {
-    Console.WriteLine($"Client Name: {client.Name}");
+    Hotel.AutomaticReservation(2, 2, new DateTime(2022, 7, 6)); // Attempt to make second reservation for same date.
+}
+catch(Exception ex)
+{
+    Console.WriteLine(ex.Message);
 }
 
-Console.WriteLine("\nRemaining vacant rooms after multiple auto reservations\n");
-foreach (Room room in Hotel.GetVacantRooms())
+Hotel.AutomaticReservation(3, 2, new DateTime(2022, 7, 11));
+Hotel.AutomaticReservation(5, 5, new DateTime(2022, 7, 12));
+
+
+Hotel.Checkin("Olu"); // After this checkin, Room capacity reduces to 35 from the initial 37
+
+Console.WriteLine(Hotel.TotalCapacityRemaining());
+
+Console.WriteLine(Hotel.AverageOccupancyPercentage());
+
+foreach(Room room in Hotel.Rooms)
 {
-    Console.WriteLine($"Room number: {room.Number} Capacity: {room.Capacity}");
+    if (room.Occupied)
+    {
+        Console.WriteLine(room.Reservations.First(r => r.Current == true).Client.Name); // To display the name of the client that checked in
+    }
 }
+
+
 
 
 
@@ -105,30 +121,37 @@ static class Hotel
         return searchedClient;
     }
 
-    public static Reservation ReserveRoom(int occupants, int clientId, Room room)
+    public static Reservation ReserveRoom(int occupants, int clientId, Room room, DateTime startdate)
     {
         Client client = Hotel.GetClient(clientId);
         if (client != null)
         {
-            if (occupants <= room.Capacity && room.Occupied == false)
+            if(client.Reservations.FirstOrDefault(r => r.StartDate.Date == startdate.Date)== null)
             {
-                Reservation newReservation = new Reservation(occupants, client, room);
-                room.Occupied = true;
-                newReservation.Id = Reservations.Count + 1;
-                Reservations.Add(newReservation);
-                room.Reservations.Add(newReservation);
-                client.Reservations.Add(newReservation);
-                return newReservation;
+                if (occupants <= room.Capacity && room.Occupied == false)
+                {
+                    Reservation newReservation = new Reservation(occupants, client, room, startdate);
+                    newReservation.Id = Reservations.Count + 1;
+                    Reservations.Add(newReservation);
+                    room.Reservations.Add(newReservation);
+                    client.Reservations.Add(newReservation);
+                    return newReservation;
+                }
+                else
+                {
+                    throw new Exception("Error: No room available with this capacity");
+                }
             }
             else
             {
-                throw new Exception("Error: No available room with this capacity");
+                throw new Exception($"Error: Sorry {client.Name}, you cannot make 2 reservations for same start date");
             }
+            
 
         }
         else
         {
-            throw new Exception("Error: No Registered Client with this Id");
+            throw new Exception("Error: No Registered Client with this Id, Please get registered");
         }
     }
 
@@ -150,18 +173,133 @@ static class Hotel
         return topThreeClients;
     }
 
-    public static Reservation AutomaticReservation(int clientId, int occupants)
+    public static Reservation AutomaticReservation(int clientId, int occupants, DateTime startdate)
     {
-        Client client = Clients.First(c => c.Id == clientId);
-        Room autoRoom = Rooms.First(r => !r.Occupied && r.Capacity >= occupants);
-        Reservation autoReservation = new Reservation(occupants, client, autoRoom);
-        autoReservation.Id = Reservations.Count + 1;
-        client.Reservations.Add(autoReservation);
-        autoRoom.Reservations.Add(autoReservation);
-        autoRoom.Occupied = true;
-        Reservations.Add(autoReservation);
-        return autoReservation;
+        Client client = GetClient(clientId);
+        Room autoRoom = Rooms.FirstOrDefault(r => !r.Occupied && r.Capacity >= occupants);
+
+        if(client != null)
+        {
+            if (client.Reservations.FirstOrDefault(r => r.StartDate.Date == startdate.Date) == null)
+            {
+                if (autoRoom != null)
+                {
+                    Reservation autoReservation = new Reservation(occupants, client, autoRoom, startdate);
+                    autoReservation.Id = Reservations.Count + 1;
+                    client.Reservations.Add(autoReservation);
+                    autoRoom.Reservations.Add(autoReservation);
+                    Reservations.Add(autoReservation);
+                    return autoReservation;
+                }
+                else
+                {
+                    throw new Exception("Error: No Room available with this capacity");
+                }
+            }
+            else
+            {
+                throw new Exception($"Error: Sorry, {client.Name}, you cannot make 2 reservations for same start date");
+            }
+
+             
+        }
+        else
+        {
+            throw new Exception("No Client with this ID");
+        }
+       
+        
     }
+
+    public static void Checkin(string clientName)
+    {
+        Client client = Clients.FirstOrDefault(c => c.Name.ToUpper() == clientName.ToUpper());
+        Reservation reservationToUse;
+        if (client != null)
+        {
+           reservationToUse = client.Reservations.FirstOrDefault(r => r.StartDate.Date == DateTime.Now.Date);
+            if(reservationToUse != null)
+            {
+                reservationToUse.Current = true;
+                reservationToUse.Room.Occupied = true;
+            }
+        }
+    }
+
+    public static void CheckoutRoom(int clientId)
+    {
+        Client client = GetClient(clientId);
+        Reservation reservationToCheckOut;
+        if (client != null)
+        {
+            reservationToCheckOut = client.Reservations.FirstOrDefault(r => r.Current == true);
+            reservationToCheckOut.Current = false;
+            reservationToCheckOut.Room.Occupied = false;
+        }
+    }
+
+    public static void CheckoutRoom(string clientName)
+    {
+        Client client = Clients.FirstOrDefault(c => c.Name.ToUpper() == clientName.ToUpper());
+        Reservation reservationToCheckOut;
+        if(client != null)
+        {
+           reservationToCheckOut = client.Reservations.FirstOrDefault(r=> r.Current == true);
+           reservationToCheckOut.Current = false;
+           reservationToCheckOut.Room.Occupied = false;
+        }
+    }
+
+
+    //public static int TotalCapacityRemaining()
+    //{
+    //    return Rooms.Aggregate(0, (current, r) => current + r.Capacity - r.Reservations.Aggregate(0,(current, r)=>current+ r.Occupants));
+    //}
+
+    public static int TotalCapacityRemaining()
+    {
+       int totalCapacity = 0;
+        foreach(Room r in Rooms)
+        {
+            totalCapacity+= r.Capacity - GetTotalOccupants(r);
+        }
+        return totalCapacity;
+    }
+
+    public static int GetTotalOccupants(Room room)//helper function for TotalCapacityRemaining();
+    {
+        int totalOccupants = 0;
+        foreach(Reservation r in room.Reservations)
+        {
+            if(r.Current == true)
+            {
+                totalOccupants += r.Occupants;
+            }
+        }
+        return totalOccupants;
+    }
+
+    public static int AverageOccupancyPercentage()
+    {
+        int totalAverage = 0;
+        foreach (Room room in Rooms)
+        {
+            if(room.Occupied == true)
+            {
+                totalAverage += GetTotalOccupants(room) / room.Capacity;
+            }
+        }
+        return totalAverage;
+    }
+
+   
+
+
+
+
+
+
+
 
 
 }
@@ -210,21 +348,23 @@ class Client
 
 class Reservation
 {
-    public DateTime Date { get; set; }
+    public DateTime Created { get; set; }
+    public DateTime StartDate { get; set; }
     public int Id { get; set; }
     public int Occupants { get; set; }
-    public bool IsCurrent { get; set; }
+    public bool Current { get; set; }
     public Client Client { get; set; }
     public Room Room { get; set; }
 
 
     // CONSTRUCTORS
     public Reservation() { }
-    public Reservation(int occupants, Client client, Room room)
+    public Reservation(int occupants, Client client, Room room, DateTime startdate)
     {
-        Date = DateTime.Now;
+        Created = DateTime.Now;
+        StartDate = startdate;
         Occupants = occupants;
-        IsCurrent = true;
+        Current = false;
         Client = client;
         Room = room;
     }
